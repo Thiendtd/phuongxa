@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    
+	<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">	
+    <title>Bạn đang ở Phường Xã nào?</title>
+	<meta name=description content="Bản đồ tra cứu Phường Xã sau sáp nhập">
+	<meta name="keywords" content="tra cứu xã phường, sáp nhập đơn vị hành chính"/>
+	<link rel="canonical" href="https://phuongxa.io.vn/">
+	<meta name=robots content="index, follow">
+	
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap&subset=vietnamese" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/topojson-client@3"></script>
+
+    <style>
+        body { font-family: 'Inter', 'Noto Sans', 'Roboto', ui-sans-serif, system-ui, sans-serif; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .animate-spin-slow { animation: spin 2s linear infinite; }
+        /* Map popups styling */
+        .map-popup .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(5px);
+            color: #333;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* Slightly softer shadow */
+        }
+        .map-popup .leaflet-popup-content { margin: 10px; font-size: 12px; font-weight: bold; }
+        .map-popup .leaflet-popup-tip { background: rgba(255, 255, 255, 0.9); } /* Ensure tip matches popup background */
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800 flex flex-col items-center justify-start min-h-screen p-4">
+
+    <div class="w-full max-w-xl mx-auto flex flex-col min-h-screen">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-purple-500 to-indigo-500 bg-clip-text text-transparent">Bạn là dân phường/xã nào sau sáp nhập</h1>
+            <p class="text-xs text-gray-400 mt-2">⚠️ Không thu thập dữ liệu cá nhân; Thông tin chỉ mang tính tham khảo.</p>
+            <p class="text-xs text-gray-400 mt-2">Hiện có dữ liệu tại: An Giang, Cà Mau, Đồng Tháp, Tây Ninh, TP HCM, Đồng Nai, Lâm Đồng; một phần Khánh Hoà, Đà Nẵng, Quảng Trị, Thanh Hoá, Hải Phòng</p>
+        </div>
+
+        <div class="bg-white/80 backdrop-blur-lg p-6 sm:p-8 rounded-2xl shadow-lg border border-gray-200 flex-shrink-0">
+            <div class="space-y-6">
+                <div>
+                    <label for="wardSearchInput" class="block mb-2 text-sm font-medium text-gray-600">Tìm theo địa chỉ hoặc địa danh</label>
+                    <div class="relative">
+                        <div class="flex space-x-2">
+                            <input type="text" id="wardSearchInput" placeholder="VD: Dinh Độc Lập; 227 Nguyễn Văn Cừ" class="w-full bg-gray-50 border-2 border-gray-300 rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-300 outline-none">
+                            <button id="searchBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg shadow-lg transition duration-300"><i class="fa-solid fa-magnifying-glass"></i></button>
+                        </div>
+                        <div id="searchResults" class="absolute z-10 w-full mt-1 bg-white rounded-md shadow-lg max-h-60 overflow-auto" style="display: none;"></div>
+                    </div>
+                </div>
+                <div class="relative flex items-center">
+                    <div class="flex-grow border-t border-gray-300"></div>
+                    <span class="flex-shrink mx-4 text-gray-400 text-sm">hoặc</span>
+                    <div class="flex-grow border-t border-gray-300"></div>
+                </div>
+                <button id="locationBtn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg transform hover:scale-105 transition duration-300"><i class="fa-solid fa-location-crosshairs mr-2"></i> Dùng vị trí hiện tại của tôi</button>
+            </div>
+        </div>
+
+        <div class="border-t border-gray-200 pt-6 mt-6"></div>
+
+        <!--div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div>
+                <label for="userName" class="block mb-2 text-sm font-medium text-gray-600">Tên của bạn (Tùy chọn)</label>
+                <input type="text" id="userName" maxlength="25" placeholder="Ví dụ: Nguyễn Văn A" class="w-full bg-gray-50 border-2 border-gray-300 rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-300 outline-none">
+            </div>
+            <div>
+                <label class="block mb-2 text-sm font-medium text-gray-600">Ảnh chân dung (Tùy chọn)</label>
+                <div class="flex items-center space-x-4">
+                    <div id="photoPreview" class="w-16 h-16 rounded-full bg-gray-200 flex-shrink-0 overflow-hidden border-2 border-gray-300 flex items-center justify-center">
+                        <i class="fa-solid fa-user text-gray-400 text-3xl"></i>
+                    </div>
+                    <label for="userPhoto" class="w-full text-center cursor-pointer bg-white hover:bg-gray-100 text-gray-700 font-semibold py-3 px-4 rounded-lg transition duration-300 border-2 border-gray-300 h-16 flex items-center justify-center">Tải ảnh</label>
+                    <input type="file" id="userPhoto" accept="image/*" class="hidden">
+                </div>
+            </div>
+        </div-->
+
+        <div class="w-full mt-8">
+            <div id="result"></div>
+            <div id="loading" class="text-center" style="display:none;"></div>
+        </div>
+
+    <div class="mt-8 text-center text-gray-400 text-xs space-y-1">
+        <p>Nguồn dữ liệu: Những người đóng góp cho OpenStreetMap</p>
+        <!--p>
+            <a href="https://github.com/dangthien3004" class="underline hover:text-gray-200">Github</a> |
+            <a href="#" class="underline hover:text-gray-200">Tải dữ liệu & Liên hệ</a> |
+            <button id="donateBtn" class="underline hover:text-white font-bold text-green-400">❤️ Ủng hộ tác giả</button>
+        </p-->
+    </div>
+	
+    <script>
+        // --- GLOBAL STATE ---
+        let wardData = null;
+        let isDataLoaded = false; // Renamed for clarity
+        let currentWardInfo = null;
+        let map = null;
+        let userName = ''; // User's name (optional)
+        let userPhoto = null;
+        let searchTimeout = null; // For debouncing search input
+
+        // --- DOM REFERENCES (Cache for performance) ---
+        const wardSearchInput = document.getElementById('wardSearchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+        const donateModal = document.getElementById('donateModal');
+        const donateModalContent = document.getElementById('donateModalContent');
+
+        // --- DATA LOADING ---
+        async function loadWardData() {
+            if (isDataLoaded) return;
+            try {
+                setLoading(true, 'Đang tải dữ liệu bản đồ...');
+                const geoJsonPath = 'https://raw.githubusercontent.com/lqtue/phuongnao/main/Data/wardData.json';
+                const geoRes = await fetch(geoJsonPath);
+                if (!geoRes.ok) throw new Error(`Lỗi tải GeoJSON!`);
+                const topojsonData = await geoRes.json();
+                wardData = topojson.feature(topojsonData, Object.keys(topojsonData.objects)[0]);
+                isDataLoaded = true;
+                setLoading(false);
+            } catch (e) {
+                setLoading(false);
+                showError(`Lỗi tải dữ liệu: ${e.message}`);
+                console.error(e);
+            }
+        }
+
+        function normalizeString(str) {
+            if (!str) return '';
+            let n = str.toLowerCase();
+            n = n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
+
+            // Consistently map common prefixes/abbreviations to their full normalized form
+            n = n.replace(/\bthành phố\b/g, "thanh pho");
+            n = n.replace(/\btp\b/g, "thanh pho"); // Handle "tp" as a word
+            n = n.replace(/tp\./g, "thanh pho"); // Handle "tp."
+            n = n.replace(/\bphường\b/g, "phuong");
+            n = n.replace(/\bp\./g, "phuong");
+            n = n.replace(/\bquận\b/g, "quan");
+            n = n.replace(/\bq\./g, "quan");
+            n = n.replace(/\bhuyện\b/g, "huyen");
+            n = n.replace(/\bh\./g, "huyen");
+            return n.replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+        }
+
+        const isAccurateMatch = (query, target) => {
+            if (!query || !target) return false;
+            const qLen = query.length;
+            const tLen = target.length;
+            return target === query ||
+                   target.startsWith(query) || // More lenient prefix matching
+                   (target.endsWith(query) && (tLen > qLen && target[tLen - qLen - 1] === ' ')) ||
+                   ` ${target} `.includes(` ${query} `);
+        }
+
+        function getWardName(properties) {
+            return properties['Tên'] || properties['name'] || 'N/A';
+        }
+
+        // --- UI DISPLAY ---
+        function setLoading(isLoading, message = 'Đang tìm kiếm...') {
+            resultDiv.innerHTML = ''; // Clear previous results
+            if (isLoading) {
+                loadingDiv.style.display = 'block'; // Show loading spinner
+                loadingDiv.innerHTML = `<div class="flex items-center justify-center space-x-3 p-8"><div class="w-8 h-8 border-4 border-t-transparent border-purple-500 rounded-full animate-spin-slow"></div><span class="text-lg text-gray-600">${message}</span></div>`;
+            } else {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        function showError(message) {
+            setLoading(false);
+            const resultContainer = resultDiv;
+            resultContainer.innerHTML = `<div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg" role="alert"><p class="font-bold">Lỗi</p><p>${message}</p></div>`;
+        }
+
+
+        // --- RESULT DISPLAY & MAP INITIALIZATION ---
+        function showResult(feature, userLocation = null) {
+            currentWardInfo = feature;
+            setLoading(false);
+
+            const mapId = `map-${Date.now()}`;
+            resultDiv.innerHTML = createInfoCardHTML(mapId);
+
+            setTimeout(() => {
+                updateInfoPanel();
+                initializeMap(mapId, feature, userLocation);
+            }, 0);
+
+            document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function createInfoCardHTML(mapId) {
+            return `
+                <div class="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+                    <div class="p-6">
+                        <div class="flex items-center space-x-4">
+                            <div id="result-photo" class="w-16 h-16 rounded-full bg-gray-200 flex-shrink-0 overflow-hidden border-2 border-white shadow-md"></div>
+                            <div>
+                               <h2 id="result-greeting" class="text-lg text-gray-700"></h2>
+                               <p id="result-ward-name" class="text-indigo-600 font-bold text-3xl"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="${mapId}" style="height: 350px; width: 100%; background-color: #f0f0f0;"></div>
+
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-3 gap-3 text-center">
+                            <div class="bg-green-100/60 text-green-800 p-2 rounded-lg">
+                                <div class="font-bold text-xs uppercase tracking-wider">Dân số</div>
+                                <div id="result-population" class="text-xl font-semibold mt-1"></div>
+                            </div>
+                            <div class="bg-yellow-100/60 text-yellow-800 p-2 rounded-lg">
+                                <div class="font-bold text-xs uppercase tracking-wider">Diện tích</div>
+                                <div id="result-area" class="text-xl font-semibold mt-1"></div>
+                            </div>
+                            <div class="bg-blue-100/60 text-blue-800 p-2 rounded-lg">
+                                <div class="font-bold text-xs uppercase tracking-wider">Mật độ</div>
+                                <div id="result-density" class="text-xl font-semibold mt-1"></div>
+                            </div>
+                        </div>
+                        <div class="text-sm border-t border-gray-200 pt-4">
+                            <table class="w-full">
+                                <tbody>
+                                    <tr>
+                                        <td class="py-2 pr-2 align-top font-semibold text-gray-500 w-20">Hàng xóm</td>
+                                        <td class="py-2 text-gray-800"><span id="result-neighbors"></span></td>
+                                    </tr>
+                                    <tr class="border-t border-gray-200">
+                                        <td class="py-2 pr-2 align-top font-semibold text-gray-500">Sáp nhập</td>
+                                        <td class="py-2 text-gray-800"><span id="result-merged-wards"></span></td>
+                                    </tr>
+                                    <tr class="border-t border-gray-200">
+                                        <td class="py-2 pr-2 align-top font-semibold text-gray-500">Trụ sở</td>
+                                        <td class="py-2 text-gray-800"><span id="result-address"></span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="result-directions-container" class="pt-2"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateInfoPanel() {
+            if (!currentWardInfo) return;
+            const properties = currentWardInfo.properties;
+            const wardName = getWardName(properties);
+            const photoHTML = userPhoto ? `<img src="${userPhoto}" alt="User Photo" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center bg-gray-200"><i class="fa-solid fa-user text-gray-400 text-2xl"></i></div>`;
+            const directionsURL = properties['Latitude 1'] && properties['Longitude 1'] ? `https://www.google.com/maps/dir/?api=1&destination=${properties['Latitude 1']},${properties['Longitude 1']}` : '#';
+            const hasDirections = properties['Latitude 1'] && properties['Longitude 1'];
+            const displayName = userName || 'Bạn';
+
+            const mergedAllText = formatWardList(properties['Sáp nhập toàn bộ từ']);
+            const mergedPartialText = formatWardList(properties['Sáp nhập một phần từ']);
+            let mergedWardsText = '';
+            if (mergedAllText) mergedWardsText += `toàn bộ ${mergedAllText}`;
+            if (mergedPartialText) {
+                if (mergedWardsText) mergedWardsText += '; và một phần ';
+                else mergedWardsText += 'một phần ';
+                mergedWardsText += mergedPartialText;
+            }
+            if (!mergedWardsText) mergedWardsText = 'Chưa có thông tin.';
+
+            document.getElementById('result-photo').innerHTML = photoHTML;
+            document.getElementById('result-greeting').innerHTML = `${displayName} ơi, bạn là cư dân`;
+            document.getElementById('result-ward-name').textContent = `${wardName}`;
+            document.getElementById('result-address').textContent = properties['Full Address 1'] || 'Chưa có thông tin.';
+            document.getElementById('result-merged-wards').innerHTML = mergedWardsText;
+            document.getElementById('result-neighbors').textContent = properties['Giáp ranh'] || 'Chưa có thông tin.';
+            document.getElementById('result-population').innerHTML = properties['Dân số (người)'] ? properties['Dân số (người)'].toLocaleString('vi-VN') : 'N/A';
+            document.getElementById('result-area').innerHTML = properties['Diện tích (km2)'] ? `${properties['Diện tích (km2)'].toFixed(2)} km²` : 'N/A';
+            document.getElementById('result-density').innerHTML = properties['Mật độ (người/km2)'] ? `${properties['Mật độ (người/km2)'].toLocaleString('vi-VN')}` : 'N/A';
+
+            const directionsContainer = document.getElementById('result-directions-container');
+            if (hasDirections) {
+                directionsContainer.innerHTML = `<a href="${directionsURL}" target="_blank" class="block w-full text-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition duration-300"><i class="fa-solid fa-map-location-dot mr-2"></i>Chỉ đường đến trụ sở</a>`;
+            } else {
+                directionsContainer.innerHTML = '';
+            }
+        }
+
+        function formatWardList(wardString) {
+            if (!wardString || wardString.trim() === '') return '';
+            const wards = wardString.split(',').map(w => w.trim()).filter(Boolean);
+            const groupedByDistrict = {};
+            wards.forEach(ward => {
+                const match = ward.match(/(.+?)\s*\((.+?)\)/);
+                if (match) {
+                    const name = match[1].trim();
+                    const district = `(${match[2].trim()})`;
+                    if (!groupedByDistrict[district]) { groupedByDistrict[district] = []; }
+                    groupedByDistrict[district].push(name);
+                } else {
+                    if (!groupedByDistrict['Khác']) { groupedByDistrict['Khác'] = []; }
+                    groupedByDistrict['Khác'].push(ward);
+                }
+            });
+            return Object.entries(groupedByDistrict).map(([district, names]) => {
+                if (district === 'Khác') return names.join(', ');
+                const prefix = names.every(n => n.startsWith('Phường ')) ? 'Phường' : (names.every(n => n.startsWith('Xã ')) ? 'Xã' : '');
+                if (prefix) {
+                    const numbers = names.map(n => n.replace(prefix, '').trim()).join(', ');
+                    return `${prefix} ${numbers} ${district}`;
+                }
+                return `${names.join(', ')} ${district}`;
+            }).join('; ');
+        }
+
+        function initializeMap(mapContainerId, selectedFeature, userLocation = null) {
+            if (map) { map.remove(); map = null; }
+            const mapContainer = document.getElementById(mapContainerId);
+            if (!mapContainer) return;
+
+            map = L.map(mapContainerId, { attributionControl: false, scrollWheelZoom: false });
+            L.tileLayer('https://mt.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'] }).addTo(map);
+
+            const highlightStyle = { color: '#facc15', weight: 4, opacity: 1, fillColor: '#fde047', fillOpacity: 0.2 };
+            const highlightLayer = L.geoJSON(selectedFeature, { style: highlightStyle }).addTo(map);
+            map.fitBounds(highlightLayer.getBounds());
+
+            if(userLocation) {
+                L.circleMarker(userLocation, { radius: 8, fillColor: "#ff4757", color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 0.9 }).addTo(map);
+            }
+        }
+
+        // --- EVENT HANDLERS & HELPERS ---
+        async function handleLocationSearch() {
+            await loadWardData(); // Ensure data is loaded
+            if (!isDataLoaded) return;
+            if (!navigator.geolocation) { showError('Trình duyệt không hỗ trợ Geolocation.'); return; }
+            setLoading(true, 'Đang lấy vị trí của bạn...');
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const [lat, lng] = [position.coords.latitude, position.coords.longitude];
+                    const foundFeature = wardData.features.find(f => isPointInGeoJSON([lng, lat], f));
+                    if (foundFeature) showResult(foundFeature, [lat, lng]);
+                    else showError('Vị trí nằm ngoài ranh giới dữ liệu.');
+                },
+                error => {
+                    let message = 'Lỗi không xác định';
+                    switch (error.code) {
+                        case error.PERMISSION_DENIED: message = 'Bạn đã từ chối quyền truy cập vị trí.'; break;
+                        case error.POSITION_UNAVAILABLE: message = 'Thông tin vị trí không khả dụng.'; break;
+                        case error.TIMEOUT: message = 'Yêu cầu vị trí quá thời gian.'; break;
+                    }
+                    showError(message);
+                }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        }
+
+        function pointInPolygon([x, y], polygon) {
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const [xi, yi] = polygon[i]; const [xj, yj] = polygon[j];
+                if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+            }
+            return inside;
+        }
+
+        function isPointInGeoJSON(point, geojsonFeature) {
+            const geom = geojsonFeature?.geometry;
+            if (!geom) return false;
+            if (geom.type === 'Polygon') return pointInPolygon(point, geom.coordinates[0]);
+            if (geom.type === 'MultiPolygon') return geom.coordinates.some(poly => pointInPolygon(point, poly[0]));
+            return false;
+        }
+
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        async function handleNominatimSearch() {
+            await loadWardData();
+            if (!isDataLoaded) return;
+
+            const query = wardSearchInput.value.trim();
+            if (query.length < 3) {
+                searchResultsDiv.style.display = 'none';
+                return;
+            }
+
+            setLoading(true, `Đang tìm địa chỉ "${query}"...`);
+
+            try {
+                // Biased search towards Vietnam
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=vn&limit=5`);
+                if (!response.ok) throw new Error(`Lỗi API Nominatim: ${response.status}`);
+                const results = await response.json();
+                displayNominatimResults(results);
+            } catch (error) {
+                console.error("Lỗi tìm kiếm Nominatim:", error);
+                showError(`Không thể tìm kiếm địa chỉ: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function displayNominatimResults(results) {
+            searchResultsDiv.innerHTML = '';
+            if (results.length === 0) {
+                searchResultsDiv.innerHTML = `<div class="p-3 text-sm text-gray-500">Không tìm thấy kết quả.</div>`;
+                searchResultsDiv.style.display = 'block';
+                return;
+            }
+
+            const ul = document.createElement('ul');
+            results.forEach(result => {
+                const li = document.createElement('li');
+                li.className = 'px-4 py-2 hover:bg-gray-100 cursor-pointer';
+                li.textContent = result.display_name;
+                li.onclick = () => selectNominatimResult(result);
+                ul.appendChild(li);
+            });
+            searchResultsDiv.appendChild(ul);
+            searchResultsDiv.style.display = 'block';
+        }
+
+        function selectNominatimResult(result) {
+            searchResultsDiv.style.display = 'none';
+            wardSearchInput.value = result.display_name;
+            
+            const lat = parseFloat(result.lat);
+            const lon = parseFloat(result.lon);
+
+            if (isNaN(lat) || isNaN(lon)) {
+                showError("Kết quả tìm kiếm không có toạ độ hợp lệ.");
+                return;
+            }
+
+            const foundFeature = wardData.features.find(f => isPointInGeoJSON([lon, lat], f));
+            if (foundFeature) {
+                showResult(foundFeature, [lat, lon]);
+            } else {
+                showError('Địa chỉ được chọn nằm ngoài ranh giới dữ liệu các phường/xã đã được cập nhật.');
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        searchBtn.addEventListener('click', handleNominatimSearch);
+        wardSearchInput.addEventListener('keyup', debounce(handleNominatimSearch, 500));
+        // Hide search results when clicking outside
+        document.addEventListener('click', function(event) {
+            const searchContainer = document.getElementById('wardSearchInput').closest('.relative');
+            if (searchContainer && !searchContainer.contains(event.target)) {
+                searchResultsDiv.style.display = 'none';
+            }
+        });
+        document.getElementById('locationBtn').addEventListener('click', handleLocationSearch);
+        document.getElementById('userName').addEventListener('input', e => {
+            userName = e.target.value.trim();
+            if (currentWardInfo) {
+                document.getElementById('result-greeting').innerHTML = `${userName || 'Bạn'} ơi, bạn là cư dân`;
+            }
+        }); // No XSS risk here as it's textContent.
+        document.getElementById('userPhoto').addEventListener('change', (e) => {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = event => {
+                const img = new Image();
+                img.onload = () => {
+                    const maxDim = 400; let { width, height } = img;
+                    if (width > maxDim || height > maxDim) {
+                        const ratio = Math.min(maxDim / width, maxDim / height); width *= ratio; height *= ratio;
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width; canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    userPhoto = canvas.toDataURL('image/jpeg', 0.8);
+                    const photoHTML = `<img src="${userPhoto}" alt="Preview" class="w-full h-full object-cover">`;
+                    document.getElementById('photoPreview').innerHTML = photoHTML;
+                    if (currentWardInfo) document.getElementById('result-photo').innerHTML = photoHTML;
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        document.getElementById('donateBtn').addEventListener('click', () => {
+            donateModal.style.display = 'flex';
+            setTimeout(() => { // Animate in
+                donateModalContent.classList.remove('opacity-0', 'scale-95');
+                donateModalContent.classList.add('opacity-100', 'scale-100');
+            }, 10);
+        });
+        document.getElementById('closeDonateModal').addEventListener('click', () => {
+            donateModalContent.classList.remove('opacity-100', 'scale-100');
+            donateModalContent.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => { donateModal.style.display = 'none'; }, 300); // Hide after animation
+        });
+        donateModal.addEventListener('click', (event) => { if (event.target === donateModal) donateModal.style.display = 'none'; });
+
+        // --- INITIALIZE ---
+        loadWardData();
+    </script>
+</body>
+</html>
